@@ -6,7 +6,7 @@ export function createClient(): mqtt.MqttClient {
   // 1. Create MQTT client using configuration
   // 2. Return the client
 
-  const connectUrl = `mqtt://${config.mqtt.host}:${config.mqtt.port}`;
+  const connectUrl = `mqtts://${config.mqtt.host}:${config.mqtt.port}`;
 
   const options: mqtt.IClientOptions = {
     clientId: config.mqtt.clientId,
@@ -15,7 +15,24 @@ export function createClient(): mqtt.MqttClient {
     username: config.mqtt.username,
     password: config.mqtt.password,
     reconnectPeriod: 1000,
+    rejectUnauthorized: false,//added
   };
 
-  return mqtt.connect(connectUrl, options);
+  const client = mqtt.connect(connectUrl, options);
+
+  // Add event listeners for debugging
+  client.on("connect", () => {
+    console.log("Connected to MQTT broker");
+  });
+
+  client.on("close", () => {
+    console.log("MQTT connection closed");
+    console.log("Attempting to reconnect to MQTT broker");
+  });
+
+  client.on("error", (error) => {
+    console.error("MQTT connection error:", error);
+  });
+
+  return client;
 }

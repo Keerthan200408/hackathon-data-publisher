@@ -1,6 +1,9 @@
 import mqtt from "mqtt";
+import axios from 'axios';
 import { config, INDICES, EXPIRY_DATES, STRIKE_RANGE } from "../config";
 import * as utils from "../utils";
+
+export const indices = ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY"];
 
 // Set of active subscriptions to avoid duplicates
 export const activeSubscriptions = new Set<string>();
@@ -39,6 +42,7 @@ export async function subscribeToAtmOptions(
   console.log(`Subscribing to ${indexName} options around ATM ${atmStrike}`);
 
   const strikeDiff = utils.getStrikeDiff(indexName);
+  const expiryDate = EXPIRY_DATES[indexName as keyof typeof EXPIRY_DATES];
   const strikes = [];
 
   for (let i = -STRIKE_RANGE; i <= STRIKE_RANGE; i++) {
@@ -46,6 +50,28 @@ export async function subscribeToAtmOptions(
   }
 
   // TODO: Subscribe to options
+  for (const strike of strikes) {
+    for (const optionType of ["ce", "pe"] as const) {
+      const token = await getOptionToken(indexName, strike, optionType);
+      if (token) {
+        // const optionTopic = utils.getOptionTopic(indexName, token); // Use utils.getOptionTopic
+        const optionTopic = `${config.app.indexPrefix}/NSE_FO|${token}`;
+        if (!activeSubscriptions.has(optionTopic)) {
+          client.subscribe(optionTopic);
+          activeSubscriptions.add(optionTopic);
+          console.log(
+            `Subscribed to ${optionTopic} (for the option ${indexName}/${expiryDate}/${optionType.toUpperCase()} ${strike})`
+          );
+        } else {
+          console.log(`Already subscribed to ${optionTopic}, skipping`);
+        }
+      } else {
+        console.warn(
+          `Failed to fetch token for ${indexName} ${optionType.toUpperCase()} ${strike}`
+        );
+      }
+    }
+  }
 }
 
 // Fetch option token from API
@@ -55,16 +81,36 @@ export async function getOptionToken(
   optionType: "ce" | "pe"
 ): Promise<string | null> {
   try {
-    // TODO: Implement this function
-    // 1. Make API call to get token
-    // 2. Return the token
+    // // TODO: Implement this function
+    // // 1. Make API call to get token
+    // // 2. Return the token
+    // const expiryDate = EXPIRY_DATES[indexName as keyof typeof EXPIRY_DATES];
+    // const url = `https://api.trado.trade/token?index=${indexName}&expiryDate=${expiryDate}&optionType=${optionType}&strikePrice=${strikePrice}`;
 
+    // // TODO: Fetch from API and return token
+
+    // return null; // Placeholder
     const expiryDate = EXPIRY_DATES[indexName as keyof typeof EXPIRY_DATES];
+    // const url = `https://api.trado.trade/token?index=NIFTY&expiryDate=22-05-2025&optionType=ce&strikePrice=25000`;
     const url = `https://api.trado.trade/token?index=${indexName}&expiryDate=${expiryDate}&optionType=${optionType}&strikePrice=${strikePrice}`;
+    
+    const response = await axios.get(url);
+    // console.log("API response:", response.data);//debugging
+    // console.log("API response:", response.data);
+    // Assuming the API returns { token: "some-token" }
+    // const token = response.data.token;
+    const token = response?.data?.data?.token;
+    // if (typeof token !== "string") {
+    //   throw new Error("Invalid token format from API");
+    // }
+    // // return token;
+    // return token.toString();
 
-    // TODO: Fetch from API and return token
+    if (token === undefined || token === null) {
+      throw new Error("Token is missing in API response");
+    }
 
-    return null; // Placeholder
+    return String(token); // works whether it's number or string
   } catch (error) {
     console.error(
       `Error fetching token for ${indexName} ${strikePrice} ${optionType}:`,

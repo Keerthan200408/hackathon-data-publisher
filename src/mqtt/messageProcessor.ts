@@ -61,7 +61,33 @@ export function processMessage(
 
     // ltpValues now contains the decoded LTP values
     for (const ltp of ltpValues) {
-      // Process the LTP value
+      console.log(`Received message on ${topic}: ${ltp}`);
+
+      // Check if this is an index topic
+      let indexName: string | undefined;
+      if (topic.startsWith("index/")) {
+        indexName = topic.split("/")[1];
+
+        // Update indexLtpMap with the latest LTP
+        indexLtpMap.set(indexName, ltp);
+
+        // One-time operation: Calculate ATM and subscribe to options
+        if (subscriptionManager.isFirstIndexMessage.get(indexName)) {
+          console.log(`First message for ${indexName}: ${ltp}`);
+          subscriptionManager.isFirstIndexMessage.set(indexName, false);
+
+          const atmStrike = utils.getAtmStrike(indexName, ltp);
+          atmStrikeMap.set(indexName, atmStrike);
+          subscriptionManager.subscribeToAtmOptions(
+            client,
+            indexName,
+            atmStrike
+          );
+        }
+      }
+
+      // Save to database with metadata (indexName for index topics)
+      db.saveToDatabase(topic, ltp, indexName);
     }
   } catch (error) {
     console.error("Error processing message:", error);
